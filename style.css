@@ -151,4 +151,31 @@ input:focus { border-color: var(--accent); }
 .modal.is-open { display: flex; }
 .modal-box { background-color: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--text-dim); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }$
+
+/* --- SCROLLBAR PERSONNALISÉE --- */
+
+/* Pour Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Pour Chrome, Edge, Safari */
+::-webkit-scrollbar {
+  width: 6px;  /* Épaisseur verticale */
+  height: 6px; /* Épaisseur horizontale (pour la heatmap) */
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border); 
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim); 
+}
