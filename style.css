@@ -1,206 +1,137 @@
-(function () {
-  "use strict";
+:root {
+  --bg: #0d1117;
+  --card-bg: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-muted: #8b949e;
+  --accent: #238636;
+  --accent-hover: #2ea043;
+  --danger: #da3633;
+}
 
-  const STORAGE_KEY = "horizon-entries-v2";
-  const GH_CONFIG_KEY = "horizon-gh-config-v2";
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
-  let entries = loadEntries();
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
 
-  function loadEntries() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
-  }
+.app-container {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
-  function saveEntries() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  }
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 15px;
+}
 
-  // DOM Elements
-  const el = {
-    entryForm: document.getElementById("entryForm"),
-    valueInput: document.getElementById("valueInput"),
-    historyBody: document.getElementById("historyBody"),
-    heatmap: document.getElementById("heatmap"),
-    menuBtn: document.getElementById("menuBtn"),
-    configModal: document.getElementById("configModal"),
-    configClose: document.getElementById("configClose"),
-    configSave: document.getElementById("configSave"),
-    ghRepo: document.getElementById("ghRepo"),
-    ghToken: document.getElementById("ghToken"),
-    syncPushBtn: document.getElementById("syncPushBtn"),
-    syncPullBtn: document.getElementById("syncPullBtn")
-  };
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
 
-  // Configuration Modal
-  el.menuBtn.onclick = () => {
-    const cfg = getGhConfig();
-    el.ghRepo.value = cfg.repo;
-    el.ghToken.value = cfg.token;
-    el.configModal.classList.add("is-open");
-  };
-  el.configClose.onclick = () => el.configModal.classList.remove("is-open");
-  el.configSave.onclick = () => {
-    localStorage.setItem(GH_CONFIG_KEY, JSON.stringify({
-      repo: el.ghRepo.value.trim(),
-      token: el.ghToken.value.trim()
-    }));
-    el.configModal.classList.remove("is-open");
-    alert("Configuration sauvegardée !");
-  };
+h2 { font-size: 1.1rem; color: var(--text); font-weight: 600; }
 
-  function getGhConfig() {
-    try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || { repo: "", token: "" }; }
-    catch { return { repo: "", token: "" }; }
-  }
+.inline-form {
+  display: flex;
+  gap: 10px;
+}
 
-  // Gestion des entrées (Ajout / Suppression)
-  el.entryForm.onsubmit = (e) => {
-    e.preventDefault();
-    const val = parseFloat(el.valueInput.value);
-    if (isNaN(val)) return;
+input[type="number"], input[type="text"], input[type="password"] {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 10px;
+  font-size: 1rem;
+  flex: 1;
+}
 
-    const today = new Date().toISOString().split("T")[0];
-    const existing = entries.find(en => en.date === today);
-    if (existing) {
-      existing.value = val;
-    } else {
-      entries.push({ date: today, value: val });
-    }
+.btn {
+  background-color: var(--border);
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.btn-primary { background-color: var(--accent); color: #fff; }
+.btn-primary:hover { background-color: var(--accent-hover); }
+.btn-danger { background-color: var(--danger); color: #fff; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 1.2rem; }
 
-    saveEntries();
-    el.valueInput.value = "";
-    render();
-  };
+/* Heatmap Grid Style GitHub */
+.heatmap-container {
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+.heatmap {
+  display: grid;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-flow: column;
+  gap: 4px;
+}
+.heat-box {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #161b22;
+  border: 1px solid rgba(27, 31, 35, 0.06);
+}
+.level-0 { background-color: #161b22; border-color: #30363d; }
+.level-1 { background-color: #0e4429; }
+.level-2 { background-color: #006d32; }
+.level-3 { background-color: #26a641; }
+.level-4 { background-color: #39d353; }
 
-  window.deleteEntry = function (date) {
-    if (!confirm(`Supprimer l'entrée du ${date} ?`)) return;
-    entries = entries.filter(en => en.date !== date);
-    saveEntries();
-    render();
-  };
+/* Table Historique */
+.table-responsive { max-height: 250px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+th, td { padding: 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); }
 
-  // Rendu Heatmap GitHub (365 derniers jours)
-  function renderHeatmap() {
-    el.heatmap.innerHTML = "";
-    const today = new Date();
-    const mapData = {};
-    entries.forEach(en => { mapData[en.date] = en.value; });
+.app-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
 
-    // Générer les 52 dernières semaines
-    for (let i = 364; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const iso = d.toISOString().split("T")[0];
-      
-      const box = document.createElement("div");
-      box.className = "heat-box";
-      
-      const val = mapData[iso];
-      if (val !== undefined) {
-        // Niveaux de couleur simples basés sur la valeur
-        let level = 1;
-        if (val > 10) level = 2;
-        if (val > 50) level = 3;
-        if (val > 100) level = 4;
-        box.classList.add(`level-${level}`);
-        box.title = `${iso}: ${val}`;
-      } else {
-        box.classList.add("level-0");
-        box.title = `${iso}: Aucune donnée`;
-      }
-      el.heatmap.appendChild(box);
-    }
-  }
-
-  // Rendu Historique Table
-  function renderHistory() {
-    el.historyBody.innerHTML = "";
-    const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
-    
-    sorted.forEach(en => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${en.date}</td>
-        <td>${en.value}</td>
-        <td><button class="btn btn-danger" style="padding:4px 8px;font-size:0.8rem;" onclick="deleteEntry('${en.date}')">Supprimer</button></td>
-      `;
-      el.historyBody.appendChild(tr);
-    });
-  }
-
-  // GitHub Push & Pull API
-  el.syncPushBtn.onclick = async () => {
-    const cfg = getGhConfig();
-    if (!cfg.repo || !cfg.token) { alert("Configurez GitHub d'abord via l'engrenage !"); return; }
-
-    const path = "horizon-data.json";
-    const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}`;
-    const contentB64 = btoa(unescape(encodeURIComponent(JSON.stringify({ entries }, null, 2))));
-
-    try {
-      el.syncPushBtn.textContent = "⏳ Envoi...";
-      // Récupérer le SHA si le fichier existe déjà
-      let sha = null;
-      const getRes = await fetch(url, { headers: { "Authorization": `token ${cfg.token}` } });
-      if (getRes.ok) {
-        const fileData = await getRes.json();
-        sha = fileData.sha;
-      }
-
-      const body = { message: "Mise à jour Horizon data", content: contentB64 };
-      if (sha) body.sha = sha;
-
-      const putRes = await fetch(url, {
-        method: "PUT",
-        headers: { "Authorization": `token ${cfg.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-
-      if (putRes.ok) alert("Push GitHub réussi !");
-      else {
-        const err = await putRes.json();
-        alert("Erreur GitHub : " + (err.message || putRes.statusText));
-      }
-    } catch (e) {
-      alert("Erreur réseau : " + e.message);
-    } finally {
-      el.syncPushBtn.textContent = "☁️ Push GitHub";
-    }
-  };
-
-  el.syncPullBtn.onclick = async () => {
-    const cfg = getGhConfig();
-    if (!cfg.repo || !cfg.token) { alert("Configurez GitHub d'abord !"); return; }
-
-    const url = `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
-    try {
-      el.syncPullBtn.textContent = "⏳ Chargement...";
-      const res = await fetch(url, { headers: { "Authorization": `token ${cfg.token}` } });
-      if (!res.ok) { alert("Fichier introuvable sur le dépôt."); return; }
-
-      const data = await res.json();
-      const jsonStr = decodeURIComponent(escape(atob(data.content.replace(/\s/g, ''))));
-      const parsed = JSON.parse(jsonStr);
-
-      if (parsed.entries) {
-        entries = parsed.entries;
-        saveEntries();
-        render();
-        alert("Pull réussi !");
-      }
-    } catch (e) {
-      alert("Erreur lors du pull : " + e.message);
-    } finally {
-      el.syncPullBtn.textContent = "📥 Pull GitHub";
-    }
-  };
-
-  function render() {
-    renderHeatmap();
-    renderHistory();
-  }
-
-  render();
-})();
+/* Modals */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  justify-content: center;
+  align-items: center;
+}
+.modal.is-open { display: flex; }
+.modal-content {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 6px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
