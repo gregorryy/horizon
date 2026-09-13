@@ -2,163 +2,72 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#EFE9DC">
-<title>Horizon — suivi quotidien</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horizon — Suivi GitHub</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="page">
-
-  <header class="head">
-    <div class="head__top">
-      <span class="head__mark">Horizon</span>
-      <button id="menuBtn" class="head__menu" aria-label="Options">
-        <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg>
-      </button>
-    </div>
-    <p class="head__sub">Une ligne par jour. Un pas de plus sur la route.</p>
+<div class="app-container">
+  
+  <header class="app-header">
+    <h1>Horizon</h1>
+    <button id="menuBtn" class="btn-icon" title="Configuration GitHub">⚙️</button>
   </header>
 
-  <section class="today" id="todayCard">
-    <div class="today__label">Aujourd'hui</div>
-    <div class="today__row">
-      <div class="today__value" id="latestValue">—</div>
-      <div class="today__delta" id="latestDelta"></div>
-    </div>
-    <div class="today__date" id="latestDate"></div>
-  </section>
-
-  <section class="entry">
-    <form id="entryForm" class="entry__form" autocomplete="off">
-      <label class="entry__label" for="valueInput">Valeur du <span id="entryDateLabel"></span></label>
-      <div class="entry__row">
-        <input type="number" step="any" inputmode="decimal" id="valueInput" placeholder="0" required>
-        <button type="submit" class="entry__submit">Noter</button>
-      </div>
+  <!-- Saisie du jour -->
+  <section class="card">
+    <h2>Aujourd'hui</h2>
+    <form id="entryForm" class="inline-form">
+      <input type="number" step="any" id="valueInput" placeholder="Valeur du jour..." required>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
     </form>
   </section>
 
-  <section class="todo" id="todoSection">
-    <div class="todo__head">
-      <h2 class="todo__title">À faire aujourd'hui</h2>
-      <span class="todo__progress" id="todoProgress"></span>
-    </div>
-    <ul class="todo__list" id="todoList"></ul>
-    <p class="todo__empty" id="todoEmpty">Aucune tâche récurrente pour l'instant. Ajoute la première ci-dessous.</p>
-    <form id="todoForm" class="todo__form" autocomplete="off">
-      <input type="text" id="todoInput" placeholder="Nouvelle tâche du quotidien" maxlength="60" required>
-      <button type="submit" class="todo__add" aria-label="Ajouter la tâche">+</button>
-    </form>
-  </section>
-
-  <section class="route" id="routeSection">
-    <div class="route__head">
-      <div class="route__balance">
-        <span class="route__balance-num" id="bornesBalance">0</span>
-        <span class="route__balance-label">bornes</span>
-      </div>
-      <div class="route__streak" id="routeStreak"></div>
-    </div>
-    <div class="road-wrap">
-      <svg id="roadSvg" viewBox="0 0 340 140" preserveAspectRatio="none"></svg>
-    </div>
-    <div class="route__footer">
-      <span id="routeBiome"></span>
-      <span id="routeMilestone"></span>
+  <!-- Heatmap style GitHub -->
+  <section class="card">
+    <h2>Activité annuelle</h2>
+    <div class="heatmap-container">
+      <div id="heatmap" class="heatmap"></div>
     </div>
   </section>
 
-  <section class="shop" id="shopSection">
-    <h2 class="shop__title">Boutique</h2>
-    <p class="shop__hint">Chaque tâche cochée rapporte des bornes. Dépense-les ici.</p>
-    <div class="shop__grid" id="shopGrid"></div>
-    <h3 class="shop__subtitle">Voyageurs</h3>
-    <div class="shop__grid" id="skinGrid"></div>
-  </section>
-
-  <section class="chart-section" id="chartSection">
-    <div class="chart-section__head">
-      <div class="range" id="rangeSwitch" role="tablist">
-        <button class="range__btn is-active" data-range="7">7j</button>
-        <button class="range__btn" data-range="30">30j</button>
-        <button class="range__btn" data-range="all">Tout</button>
-      </div>
-    </div>
-    <div class="chart-wrap">
-      <svg id="chartSvg" viewBox="0 0 340 180" preserveAspectRatio="none"></svg>
-      <div class="chart-empty" id="chartEmpty">Ajoute au moins deux valeurs pour voir la courbe.</div>
-    </div>
-    <div class="chart-legend" id="chartLegend"></div>
-  </section>
-
-  <section class="stats" id="statsSection">
-    <div class="stat">
-      <span class="stat__label">Min</span>
-      <span class="stat__value" id="statMin">—</span>
-    </div>
-    <div class="stat">
-      <span class="stat__label">Max</span>
-      <span class="stat__value" id="statMax">—</span>
-    </div>
-    <div class="stat">
-      <span class="stat__label">Moyenne</span>
-      <span class="stat__value" id="statAvg">—</span>
-    </div>
-    <div class="stat">
-      <span class="stat__label">Depuis le début</span>
-      <span class="stat__value" id="statChange">—</span>
+  <!-- Statistiques et Historique -->
+  <section class="card">
+    <h2>Historique & Valeurs</h2>
+    <div class="table-responsive">
+      <table id="historyTable">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Valeur</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
     </div>
   </section>
 
-  <section class="history">
-    <h2 class="history__title">Journal</h2>
-    <ul class="history__list" id="historyList"></ul>
-    <p class="history__empty" id="historyEmpty">Pas encore d'entrée. Ta première ligne t'attend au-dessus.</p>
-  </section>
-
-  <footer class="foot">
-    <span>Synchronisation & Données</span>
-    <button id="syncPushBtn" class="foot__link">☁️ Sauvegarder sur GitHub</button>
-    <button id="syncPullBtn" class="foot__link">📥 Restaurer depuis GitHub</button>
-    <button id="exportBtn" class="foot__link">Exporter en CSV</button>
-    <button id="resetBtn" class="foot__link foot__link--danger">Tout effacer</button>
+  <!-- Footer Sync -->
+  <footer class="app-footer">
+    <button id="syncPushBtn" class="btn btn-success">☁️ Push GitHub</button>
+    <button id="syncPullBtn" class="btn btn-secondary">📥 Pull GitHub</button>
   </footer>
 
 </div>
 
-<!-- Bottom sheet d'édition de valeur -->
-<div class="sheet" id="editSheet">
-  <div class="sheet__backdrop" id="sheetBackdrop"></div>
-  <div class="sheet__panel">
-    <div class="sheet__grabber"></div>
-    <h3 class="sheet__title">Modifier l'entrée</h3>
-    <div class="sheet__date" id="sheetDate"></div>
-    <input type="number" step="any" inputmode="decimal" id="sheetValue" class="sheet__input">
-    <div class="sheet__actions">
-      <button id="sheetDelete" class="sheet__btn sheet__btn--danger">Supprimer</button>
-      <button id="sheetSave" class="sheet__btn sheet__btn--primary">Enregistrer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Bottom sheet de configuration GitHub -->
-<div class="sheet" id="configSheet">
-  <div class="sheet__backdrop" id="configBackdrop"></div>
-  <div class="sheet__panel">
-    <div class="sheet__grabber"></div>
-    <h3 class="sheet__title">Synchro GitHub</h3>
-    <div class="sheet__date">Configure ton dépôt et ton token d'accès personnel.</div>
-    <label class="entry__label" style="margin-top:12px;">Dépôt (ex: utilisateur/repo)</label>
-    <input type="text" id="ghRepo" class="sheet__input" placeholder="mon-pseudo/horizon-data" style="font-size:16px; padding:10px 14px; margin-top:4px;">
-    <label class="entry__label" style="margin-top:12px;">Token Personnel (PAT)</label>
-    <input type="password" id="ghToken" class="sheet__input" placeholder="ghp_xxxxxxxxxxxx" style="font-size:16px; padding:10px 14px; margin-top:4px;">
-    <div class="sheet__actions">
-      <button id="configSave" class="sheet__btn sheet__btn--primary">Enregistrer la config</button>
+<!-- Modal Configuration GitHub -->
+<div id="configModal" class="modal">
+  <div class="modal-content">
+    <h3>Configuration GitHub</h3>
+    <label>Dépôt (ex: gregorryy/horizon)</label>
+    <input type="text" id="ghRepo" placeholder="utilisateur/repo">
+    <label>Token d'accès personnel (PAT)</label>
+    <input type="password" id="ghToken" placeholder="ghp_...">
+    <div class="modal-actions">
+      <button id="configSave" class="btn btn-primary">Enregistrer</button>
+      <button id="configClose" class="btn btn-secondary">Fermer</button>
     </div>
   </div>
 </div>
