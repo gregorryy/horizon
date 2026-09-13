@@ -3,45 +3,71 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Horizon — Suivi GitHub</title>
+<title>Horizon — Suivi Quotidien</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="app-container">
   
+  <!-- En-tête -->
   <header class="app-header">
-    <h1>Horizon</h1>
+    <div class="brand">
+      <h1>Horizon</h1>
+      <span class="badge-bornes" id="bornesBadge">0 bornes</span>
+    </div>
     <button id="menuBtn" class="btn-icon" title="Configuration GitHub">⚙️</button>
   </header>
 
-  <!-- Saisie du jour -->
+  <!-- Saisie de la valeur du jour -->
   <section class="card">
-    <h2>Aujourd'hui</h2>
+    <h2>Valeur du jour</h2>
     <form id="entryForm" class="inline-form">
-      <input type="number" step="any" id="valueInput" placeholder="Valeur du jour..." required>
-      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <input type="number" step="any" id="valueInput" placeholder="Ex: 75.5..." required>
+      <button type="submit" class="btn btn-primary">Noter</button>
     </form>
   </section>
 
-  <!-- Heatmap style GitHub -->
+  <!-- Système de To-Do récurrent (Gains de bornes) -->
+  <section class="card">
+    <div class="card-header-row">
+      <h2>Routine quotidienne</h2>
+      <span class="sub-text" id="todoProgressText">0 / 0</span>
+    </div>
+    <ul id="todoList" class="todo-list"></ul>
+    <form id="todoForm" class="inline-form" style="margin-top: 10px;">
+      <input type="text" id="todoInput" placeholder="Nouvelle habitude / tâche récurrente..." maxlength="50" required>
+      <button type="submit" class="btn btn-secondary">+</button>
+    </form>
+  </section>
+
+  <!-- Heatmap style GitHub (Activité) -->
   <section class="card">
     <h2>Activité annuelle</h2>
     <div class="heatmap-container">
       <div id="heatmap" class="heatmap"></div>
     </div>
+    <div class="heatmap-legend">
+      <span>Moins</span>
+      <div class="heat-box level-0"></div>
+      <div class="heat-box level-1"></div>
+      <div class="heat-box level-2"></div>
+      <div class="heat-box level-3"></div>
+      <div class="heat-box level-4"></div>
+      <span>Plus</span>
+    </div>
   </section>
 
-  <!-- Statistiques et Historique -->
+  <!-- Historique des valeurs -->
   <section class="card">
-    <h2>Historique & Valeurs</h2>
+    <h2>Historique des entrées</h2>
     <div class="table-responsive">
-      <table id="historyTable">
+      <table>
         <thead>
           <tr>
             <th>Date</th>
             <th>Valeur</th>
-            <th>Action</th>
+            <th style="text-align: right;">Action</th>
           </tr>
         </thead>
         <tbody id="historyBody"></tbody>
@@ -49,7 +75,7 @@
     </div>
   </section>
 
-  <!-- Footer Sync -->
+  <!-- Footer Sync GitHub -->
   <footer class="app-footer">
     <button id="syncPushBtn" class="btn btn-success">☁️ Push GitHub</button>
     <button id="syncPullBtn" class="btn btn-secondary">📥 Pull GitHub</button>
