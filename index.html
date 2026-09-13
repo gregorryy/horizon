@@ -3,66 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Horizon — Suivi Quotidien</title>
+<title>Horizon</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="app-container">
+<div class="shell">
   
-  <!-- En-tête -->
-  <header class="app-header">
-    <div class="brand">
-      <h1>Horizon</h1>
-      <span class="badge-bornes" id="bornesBadge">0 bornes</span>
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__title">Horizon</span>
+      <span class="topbar__bornes" id="bornesBadge">0 bornes</span>
     </div>
-    <button id="menuBtn" class="btn-icon" title="Configuration GitHub">⚙️</button>
+    <button id="menuBtn" class="icon-btn" title="Paramètres GitHub">⚙</button>
   </header>
 
-  <!-- Saisie de la valeur du jour -->
-  <section class="card">
-    <h2>Valeur du jour</h2>
-    <form id="entryForm" class="inline-form">
-      <input type="number" step="any" id="valueInput" placeholder="Ex: 75.5..." required>
-      <button type="submit" class="btn btn-primary">Noter</button>
-    </form>
-  </section>
-
-  <!-- Système de To-Do récurrent (Gains de bornes) -->
-  <section class="card">
-    <div class="card-header-row">
-      <h2>Routine quotidienne</h2>
-      <span class="sub-text" id="todoProgressText">0 / 0</span>
+  <!-- Saisie du jour -->
+  <section class="panel">
+    <div class="panel__header">
+      <h2>Suivi du jour</h2>
+      <span class="panel__date" id="currentDateLabel"></span>
     </div>
-    <ul id="todoList" class="todo-list"></ul>
-    <form id="todoForm" class="inline-form" style="margin-top: 10px;">
-      <input type="text" id="todoInput" placeholder="Nouvelle habitude / tâche récurrente..." maxlength="50" required>
-      <button type="submit" class="btn btn-secondary">+</button>
+    <form id="entryForm" class="row-form">
+      <input type="number" step="any" id="valueInput" placeholder="Entrer une valeur..." required>
+      <button type="submit" class="btn btn-primary">Valider</button>
     </form>
   </section>
 
-  <!-- Heatmap style GitHub (Activité) -->
-  <section class="card">
-    <h2>Activité annuelle</h2>
-    <div class="heatmap-container">
-      <div id="heatmap" class="heatmap"></div>
+  <!-- Graphique d'évolution -->
+  <section class="panel">
+    <h2>Évolution</h2>
+    <div class="chart-container">
+      <svg id="trendSvg" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
+      <div class="chart-empty" id="chartEmpty" style="display:none;">Pas assez de données pour tracer la courbe.</div>
+    </div>
+  </section>
+
+  <!-- Heatmap Annuelle Style GitHub -->
+  <section class="panel">
+    <div class="panel__header">
+      <h2>Activité annuelle</h2>
+      <div class="year-selector">
+        <button type="button" id="prevYearBtn" class="icon-btn">‹</button>
+        <span id="yearLabel" class="year-label">2026</span>
+        <button type="button" id="nextYearBtn" class="icon-btn">›</button>
+      </div>
+    </div>
+    <div class="heatmap-wrapper">
+      <div id="heatmapGrid" class="heatmap-grid"></div>
     </div>
     <div class="heatmap-legend">
       <span>Moins</span>
-      <div class="heat-box level-0"></div>
-      <div class="heat-box level-1"></div>
-      <div class="heat-box level-2"></div>
-      <div class="heat-box level-3"></div>
-      <div class="heat-box level-4"></div>
+      <i class="square l0"></i>
+      <i class="square l1"></i>
+      <i class="square l2"></i>
+      <i class="square l3"></i>
+      <i class="square l4"></i>
       <span>Plus</span>
     </div>
   </section>
 
-  <!-- Historique des valeurs -->
-  <section class="card">
-    <h2>Historique des entrées</h2>
-    <div class="table-responsive">
-      <table>
+  <!-- Routine / To-Do -->
+  <section class="panel">
+    <div class="panel__header">
+      <h2>Routine quotidienne</h2>
+      <span class="counter-badge" id="todoProgressText">0/0</span>
+    </div>
+    <ul id="todoList" class="todo-list"></ul>
+    <form id="todoForm" class="row-form" style="margin-top: 12px;">
+      <input type="text" id="todoInput" placeholder="Nouvelle habitude..." maxlength="40" required>
+      <button type="submit" class="btn btn-ghost">+</button>
+    </form>
+  </section>
+
+  <!-- Historique -->
+  <section class="panel">
+    <h2>Historique</h2>
+    <div class="table-container">
+      <table class="data-table">
         <thead>
           <tr>
             <th>Date</th>
@@ -75,25 +93,28 @@
     </div>
   </section>
 
-  <!-- Footer Sync GitHub -->
-  <footer class="app-footer">
-    <button id="syncPushBtn" class="btn btn-success">☁️ Push GitHub</button>
-    <button id="syncPullBtn" class="btn btn-secondary">📥 Pull GitHub</button>
+  <footer class="footer-sync">
+    <button id="syncPushBtn" class="btn btn-success">Mettre à jour GitHub</button>
+    <button id="syncPullBtn" class="btn btn-ghost">Récupérer GitHub</button>
   </footer>
 
 </div>
 
-<!-- Modal Configuration GitHub -->
+<!-- Modal Config GitHub -->
 <div id="configModal" class="modal">
-  <div class="modal-content">
+  <div class="modal-box">
     <h3>Configuration GitHub</h3>
-    <label>Dépôt (ex: gregorryy/horizon)</label>
-    <input type="text" id="ghRepo" placeholder="utilisateur/repo">
-    <label>Token d'accès personnel (PAT)</label>
-    <input type="password" id="ghToken" placeholder="ghp_...">
+    <div class="field">
+      <label>Dépôt (ex: utilisateur/repo)</label>
+      <input type="text" id="ghRepo" placeholder="pseudo/projet">
+    </div>
+    <div class="field">
+      <label>Token personnel (PAT)</label>
+      <input type="password" id="ghToken" placeholder="ghp_...">
+    </div>
     <div class="modal-actions">
       <button id="configSave" class="btn btn-primary">Enregistrer</button>
-      <button id="configClose" class="btn btn-secondary">Fermer</button>
+      <button id="configClose" class="btn btn-ghost">Fermer</button>
     </div>
   </div>
 </div>
