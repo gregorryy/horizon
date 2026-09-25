@@ -1,124 +1,168 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Horizon</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Horizon</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="topbar__brand">
+          <span class="topbar__title">Horizon</span>
+          <span class="topbar__tuff" id="tuffBadge">0 tuff</span>
+        </div>
+        <button id="menuBtn" class="icon-btn" title="Paramètres GitHub">
+          ⚙
+        </button>
+      </header>
 
-<div class="shell">
-  
-  <header class="topbar">
-    <div class="topbar__brand">
-      <span class="topbar__title">Horizon</span>
-      <span class="topbar__bornes" id="bornesBadge">0 bornes</span>
+      <!-- Saisie du jour -->
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Suivi du jour</h2>
+          <span class="panel__date" id="currentDateLabel"></span>
+        </div>
+        <form id="entryForm" class="row-form">
+          <input
+            type="number"
+            step="any"
+            id="valueInput"
+            placeholder="Entrer une valeur..."
+            required
+          />
+          <button type="submit" class="btn btn-primary">Valider</button>
+        </form>
+      </section>
+
+      <!-- Graphique d'évolution -->
+      <section class="panel">
+        <h2>Évolution</h2>
+        <div class="chart-container">
+          <svg
+            id="trendSvg"
+            viewBox="0 0 600 160"
+            preserveAspectRatio="none"
+          ></svg>
+          <div class="chart-empty" id="chartEmpty" style="display: none">
+            Pas assez de données pour tracer la courbe.
+          </div>
+        </div>
+      </section>
+
+      <!-- Heatmap Annuelle Style GitHub -->
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Activité annuelle</h2>
+          <div class="year-selector">
+            <button type="button" id="prevYearBtn" class="icon-btn">‹</button>
+            <span id="yearLabel" class="year-label">2026</span>
+            <button type="button" id="nextYearBtn" class="icon-btn">›</button>
+          </div>
+        </div>
+        <div class="heatmap-wrapper">
+          <div id="heatmapGrid" class="heatmap-grid"></div>
+        </div>
+        <div class="heatmap-legend">
+          <span>Moins</span>
+          <i class="square l0"></i>
+          <i class="square l1"></i>
+          <i class="square l2"></i>
+          <i class="square l3"></i>
+          <i class="square l4"></i>
+          <span>Plus</span>
+        </div>
+      </section>
+
+      <!-- Routine / To-Do -->
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Routine quotidienne</h2>
+          <span class="counter-badge" id="todoProgressText">0/0</span>
+        </div>
+        <ul id="todoList" class="todo-list"></ul>
+        <form id="todoForm" class="row-form" style="margin-top: 12px">
+          <input
+            type="text"
+            id="todoInput"
+            placeholder="Nouvelle habitude..."
+            maxlength="40"
+            required
+          />
+          <button type="submit" class="btn btn-ghost">+</button>
+        </form>
+      </section>
+
+      <!-- Historique -->
+      <section class="panel">
+        <h2>Historique</h2>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Valeur</th>
+                <th style="text-align: right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Boutique Tuff -->
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Boutique tuff</h2>
+          <span class="panel__date">Tes envies, ton prix</span>
+        </div>
+        <form id="shopForm" class="shop-form">
+          <input
+            type="text"
+            id="shopNameInput"
+            placeholder="Ce que tu veux acheter..."
+            maxlength="60"
+            required
+          />
+          <select id="shopCategoryInput" required>
+            <option value="petit-plaisir">--</option>
+            <option value="sortie">-</option>
+            <option value="materiel">+</option>
+            <option value="gros-projet">++</option>
+          </select>
+          <button type="submit" class="btn btn-ghost">Ajouter</button>
+        </form>
+        <ul id="shopList" class="shop-list"></ul>
+      </section>
+
+      <footer class="footer-sync">
+        <button id="syncPushBtn" class="btn btn-success">
+          Mettre à jour GitHub
+        </button>
+        <button id="syncPullBtn" class="btn btn-ghost">Récupérer GitHub</button>
+      </footer>
     </div>
-    <button id="menuBtn" class="icon-btn" title="Paramètres GitHub">⚙</button>
-  </header>
 
-  <!-- Saisie du jour -->
-  <section class="panel">
-    <div class="panel__header">
-      <h2>Suivi du jour</h2>
-      <span class="panel__date" id="currentDateLabel"></span>
-    </div>
-    <form id="entryForm" class="row-form">
-      <input type="number" step="any" id="valueInput" placeholder="Entrer une valeur..." required>
-      <button type="submit" class="btn btn-primary">Valider</button>
-    </form>
-  </section>
-
-  <!-- Graphique d'évolution -->
-  <section class="panel">
-    <h2>Évolution</h2>
-    <div class="chart-container">
-      <svg id="trendSvg" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
-      <div class="chart-empty" id="chartEmpty" style="display:none;">Pas assez de données pour tracer la courbe.</div>
-    </div>
-  </section>
-
-  <!-- Heatmap Annuelle Style GitHub -->
-  <section class="panel">
-    <div class="panel__header">
-      <h2>Activité annuelle</h2>
-      <div class="year-selector">
-        <button type="button" id="prevYearBtn" class="icon-btn">‹</button>
-        <span id="yearLabel" class="year-label">2026</span>
-        <button type="button" id="nextYearBtn" class="icon-btn">›</button>
+    <!-- Modal Config GitHub -->
+    <div id="configModal" class="modal">
+      <div class="modal-box">
+        <h3>Configuration GitHub</h3>
+        <div class="field">
+          <label>Dépôt (ex: utilisateur/repo)</label>
+          <input type="text" id="ghRepo" placeholder="pseudo/projet" />
+        </div>
+        <div class="field">
+          <label>Token personnel (PAT)</label>
+          <input type="password" id="ghToken" placeholder="ghp_..." />
+        </div>
+        <div class="modal-actions">
+          <button id="configSave" class="btn btn-primary">Enregistrer</button>
+          <button id="configClose" class="btn btn-ghost">Fermer</button>
+        </div>
       </div>
     </div>
-    <div class="heatmap-wrapper">
-      <div id="heatmapGrid" class="heatmap-grid"></div>
-    </div>
-    <div class="heatmap-legend">
-      <span>Moins</span>
-      <i class="square l0"></i>
-      <i class="square l1"></i>
-      <i class="square l2"></i>
-      <i class="square l3"></i>
-      <i class="square l4"></i>
-      <span>Plus</span>
-    </div>
-  </section>
 
-  <!-- Routine / To-Do -->
-  <section class="panel">
-    <div class="panel__header">
-      <h2>Routine quotidienne</h2>
-      <span class="counter-badge" id="todoProgressText">0/0</span>
-    </div>
-    <ul id="todoList" class="todo-list"></ul>
-    <form id="todoForm" class="row-form" style="margin-top: 12px;">
-      <input type="text" id="todoInput" placeholder="Nouvelle habitude..." maxlength="40" required>
-      <button type="submit" class="btn btn-ghost">+</button>
-    </form>
-  </section>
-
-  <!-- Historique -->
-  <section class="panel">
-    <h2>Historique</h2>
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Valeur</th>
-            <th style="text-align: right;">Action</th>
-          </tr>
-        </thead>
-        <tbody id="historyBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <footer class="footer-sync">
-    <button id="syncPushBtn" class="btn btn-success">Mettre à jour GitHub</button>
-    <button id="syncPullBtn" class="btn btn-ghost">Récupérer GitHub</button>
-  </footer>
-
-</div>
-
-<!-- Modal Config GitHub -->
-<div id="configModal" class="modal">
-  <div class="modal-box">
-    <h3>Configuration GitHub</h3>
-    <div class="field">
-      <label>Dépôt (ex: utilisateur/repo)</label>
-      <input type="text" id="ghRepo" placeholder="pseudo/projet">
-    </div>
-    <div class="field">
-      <label>Token personnel (PAT)</label>
-      <input type="password" id="ghToken" placeholder="ghp_...">
-    </div>
-    <div class="modal-actions">
-      <button id="configSave" class="btn btn-primary">Enregistrer</button>
-      <button id="configClose" class="btn btn-ghost">Fermer</button>
-    </div>
-  </div>
-</div>
-
-<script src="app.js"></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>
