@@ -1,34 +1,74 @@
 (function () {
   "use strict";
 
+  const APP_VERSION = "1.0.11";
+  const DATA_FORMAT_VERSION = 3;
   const K_ENTRIES = "horizon-entries-v4";
   const K_TODOS = "horizon-todos-v4";
   const K_DONE = "horizon-done-v4";
-  const K_BORNES = "horizon-bornes-v4";
+  const K_TODO_TOTALS = "horizon-todo-totals-v1";
+  const K_TUFF = "horizon-tuff-v4";
+  const K_SHOP = "horizon-shop-v1";
+  const K_OLD_BORNES = "horizon-bornes-v4";
   const K_GH = "horizon-gh-v4";
 
   let entries = load(K_ENTRIES, []);
   let todos = load(K_TODOS, [
     { id: "1", text: "Boire 1.5L d'eau" },
-    { id: "2", text: "Session de code" }
+    { id: "2", text: "Session de code" },
   ]);
   let todoDone = load(K_DONE, {});
-  let bornes = parseInt(localStorage.getItem(K_BORNES) || "0", 10);
-  
+  let todoTotals = {};
+  let shopItems = load(K_SHOP, []);
+  let tuff = parseInt(
+    localStorage.getItem(K_TUFF) || localStorage.getItem(K_OLD_BORNES) || "0",
+    10,
+  );
+
   let currentDisplayYear = new Date().getFullYear();
 
   function load(k, fallback) {
-    try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : fallback; } catch { return fallback; }
+    try {
+      const r = localStorage.getItem(k);
+      return r ? JSON.parse(r) : fallback;
+    } catch {
+      return fallback;
+    }
   }
 
   function save() {
     localStorage.setItem(K_ENTRIES, JSON.stringify(entries));
     localStorage.setItem(K_TODOS, JSON.stringify(todos));
     localStorage.setItem(K_DONE, JSON.stringify(todoDone));
-    localStorage.setItem(K_BORNES, bornes.toString());
+    localStorage.setItem(K_TODO_TOTALS, JSON.stringify(todoTotals));
+    localStorage.setItem(K_TUFF, tuff.toString());
+    localStorage.setItem(K_SHOP, JSON.stringify(shopItems));
   }
 
   const todayISO = () => new Date().toISOString().split("T")[0];
+
+  const SHOP_CATEGORIES = {
+    "petit-plaisir": { label: "Plaisir", min: 20, max: 100 },
+    sortie: { label: "Sortie", min: 100, max: 400 },
+    materiel: { label: "Matériel", min: 400, max: 1500 },
+    "gros-projet": { label: "Projet", min: 1500, max: 5000 },
+  };
+
+  function migrateTodoTotals(importedTodos, importedDone, importedTotals) {
+    const totals =
+      importedTotals && typeof importedTotals === "object"
+        ? { ...importedTotals }
+        : {};
+    const fallbackTotal = Array.isArray(importedTodos)
+      ? importedTodos.length
+      : 0;
+    Object.keys(importedDone || {}).forEach((date) => {
+      if (totals[date] === undefined) totals[date] = fallbackTotal;
+    });
+    return totals;
+  }
+
+  todoTotals = migrateTodoTotals(todos, todoDone, load(K_TODO_TOTALS, {}));
 
   const el = {
     currentDateLabel: document.getElementById("currentDateLabel"),
@@ -44,8 +84,12 @@
     todoForm: document.getElementById("todoForm"),
     todoInput: document.getElementById("todoInput"),
     todoProgressText: document.getElementById("todoProgressText"),
+    shopForm: document.getElementById("shopForm"),
+    shopNameInput: document.getElementById("shopNameInput"),
+    shopCategoryInput: document.getElementById("shopCategoryInput"),
+    shopList: document.getElementById("shopList"),
     historyBody: document.getElementById("historyBody"),
-    bornesBadge: document.getElementById("bornesBadge"),
+    tuffBadge: document.getElementById("tuffBadge"),
     menuBtn: document.getElementById("menuBtn"),
     configModal: document.getElementById("configModal"),
     configClose: document.getElementById("configClose"),
@@ -53,10 +97,14 @@
     ghRepo: document.getElementById("ghRepo"),
     ghToken: document.getElementById("ghToken"),
     syncPushBtn: document.getElementById("syncPushBtn"),
-    syncPullBtn: document.getElementById("syncPullBtn")
+    syncPullBtn: document.getElementById("syncPullBtn"),
   };
 
-  el.currentDateLabel.textContent = new Date().toLocaleDateString("fr-FR", { weekday: 'short', day: 'numeric', month: 'short' });
+  el.currentDateLabel.textContent = new Date().toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 
   // Paramètres GitHub
   el.menuBtn.onclick = () => {
@@ -67,7 +115,13 @@
   };
   el.configClose.onclick = () => el.configModal.classList.remove("is-open");
   el.configSave.onclick = () => {
-    localStorage.setItem(K_GH, JSON.stringify({ repo: el.ghRepo.value.trim(), token: el.ghToken.value.trim() }));
+    localStorage.setItem(
+      K_GH,
+      JSON.stringify({
+        repo: el.ghRepo.value.trim(),
+        token: el.ghToken.value.trim(),
+      }),
+    );
     el.configModal.classList.remove("is-open");
     alert("Paramètres enregistrés !");
   };
@@ -78,23 +132,30 @@
     const val = parseFloat(el.valueInput.value);
     if (isNaN(val)) return;
     const day = todayISO();
-    const ex = entries.find(x => x.date === day);
-    if (ex) ex.value = val; else entries.push({ date: day, value: val });
+    const ex = entries.find((x) => x.date === day);
+    if (ex) ex.value = val;
+    else entries.push({ date: day, value: val });
     el.valueInput.value = "";
     save();
     renderAll();
   };
 
-  window.deleteEntry = function(date) {
+  window.deleteEntry = function (date) {
     if (!confirm(`Supprimer l'entrée du ${date} ?`)) return;
-    entries = entries.filter(x => x.date !== date);
+    entries = entries.filter((x) => x.date !== date);
     save();
     renderAll();
   };
 
   // Sélecteur d'année Heatmap
-  el.prevYearBtn.onclick = () => { currentDisplayYear--; renderHeatmap(); };
-  el.nextYearBtn.onclick = () => { currentDisplayYear++; renderHeatmap(); };
+  el.prevYearBtn.onclick = () => {
+    currentDisplayYear--;
+    renderHeatmap();
+  };
+  el.nextYearBtn.onclick = () => {
+    currentDisplayYear++;
+    renderHeatmap();
+  };
 
   // Heatmap Annuelle rigoureuse (1 case = 1 jour de l'année sélectionnée)
   function renderHeatmap() {
@@ -106,12 +167,15 @@
 
     // Ajustement pour commencer la grille proprement au premier jour de l'année
     let d = new Date(start);
-    while (d.getDay() !== 1) { // Aligner sur le Lundi
+    while (d.getDay() !== 1) {
+      // Aligner sur le Lundi
       d.setDate(d.getDate() - 1);
     }
 
     const mapData = {};
-    entries.forEach(x => { mapData[x.date] = x.value; });
+    entries.forEach((x) => {
+      mapData[x.date] = x.value;
+    });
 
     while (d <= end || d.getDay() !== 1) {
       const iso = d.toISOString().split("T")[0];
@@ -119,17 +183,20 @@
       box.className = "square";
 
       if (d.getFullYear() === currentDisplayYear) {
-        const doneCount = (todoDone[iso] || []).length;
+        const doneCount = (todoDone[iso] || []).filter((id) =>
+          todos.some((todo) => todo.id === id),
+        ).length;
         const hasVal = mapData[iso] !== undefined;
+        const routineTotal =
+          iso === todayISO() ? todos.length : todoTotals[iso] || todos.length;
+        const completion =
+          routineTotal > 0
+            ? Math.min(100, Math.round((doneCount / routineTotal) * 100))
+            : 0;
 
-        let level = 0;
-        if (doneCount > 0) level = 2;
-        if (doneCount >= 2) level = 3;
-        if (doneCount >= 3 || hasVal) level = 4;
-        if (!doneCount && !hasVal) level = 0;
-
-        box.classList.add(`l${level}`);
-        box.title = `${iso} — ${doneCount} tâches / Val: ${hasVal ? mapData[iso] : 'aucune'}`;
+        box.classList.add(completion > 0 ? "l-active" : "l0");
+        box.style.setProperty("--heat-progress", `${completion}%`);
+        box.title = `${iso} — ${completion}% (${doneCount}/${routineTotal} tâches) / Val: ${hasVal ? mapData[iso] : "aucune"}`;
       } else {
         box.style.opacity = "0.1"; // Jours hors année affichée
       }
@@ -143,7 +210,7 @@
   function renderTrend() {
     const svg = el.trendSvg;
     svg.innerHTML = "";
-    const sorted = [...entries].sort((a,b) => a.date.localeCompare(b.date));
+    const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
 
     if (sorted.length < 2) {
       el.chartEmpty.style.display = "flex";
@@ -151,9 +218,12 @@
     }
     el.chartEmpty.style.display = "none";
 
-    const W = 600, H = 160, pad = 20;
-    const vals = sorted.map(x => x.value);
-    const min = Math.min(...vals), max = Math.max(...vals);
+    const W = 600,
+      H = 160,
+      pad = 20;
+    const vals = sorted.map((x) => x.value);
+    const min = Math.min(...vals),
+      max = Math.max(...vals);
     const span = min === max ? 1 : max - min;
 
     const pts = sorted.map((x, i) => {
@@ -163,27 +233,36 @@
     });
 
     const ns = "http://www.w3.org/2000/svg";
-    const pathD = `M ${pts.map(p => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L ")}`;
-    const areaD = `${pathD} L ${pts[pts.length-1][0]} ${H - 5} L ${pts[0][0]} ${H - 5} Z`;
+    const pathD = `M ${pts.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L ")}`;
+    const areaD = `${pathD} L ${pts[pts.length - 1][0]} ${H - 5} L ${pts[0][0]} ${H - 5} Z`;
 
     const grad = document.createElementNS(ns, "linearGradient");
-    grad.id = "cg"; grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0"); grad.setAttribute("x2", "0"); grad.setAttribute("y2", "1");
+    grad.id = "cg";
+    grad.setAttribute("x1", "0");
+    grad.setAttribute("y1", "0");
+    grad.setAttribute("x2", "0");
+    grad.setAttribute("y2", "1");
     grad.innerHTML = `<stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>`;
     svg.appendChild(grad);
 
     const pathArea = document.createElementNS(ns, "path");
-    pathArea.setAttribute("d", areaD); pathArea.setAttribute("fill", "url(#cg)");
+    pathArea.setAttribute("d", areaD);
+    pathArea.setAttribute("fill", "url(#cg)");
     svg.appendChild(pathArea);
 
     const pathLine = document.createElementNS(ns, "path");
-    pathLine.setAttribute("d", pathD); pathLine.setAttribute("fill", "none");
-    pathLine.setAttribute("stroke", "var(--accent)"); pathLine.setAttribute("stroke-width", "2.5");
+    pathLine.setAttribute("d", pathD);
+    pathLine.setAttribute("fill", "none");
+    pathLine.setAttribute("stroke", "var(--accent)");
+    pathLine.setAttribute("stroke-width", "2.5");
     svg.appendChild(pathLine);
 
     const last = pts[pts.length - 1];
     const dot = document.createElementNS(ns, "circle");
-    dot.setAttribute("cx", last[0]); dot.setAttribute("cy", last[1]);
-    dot.setAttribute("r", "4"); dot.setAttribute("fill", "var(--accent)");
+    dot.setAttribute("cx", last[0]);
+    dot.setAttribute("cy", last[1]);
+    dot.setAttribute("r", "4");
+    dot.setAttribute("fill", "var(--accent)");
     svg.appendChild(dot);
   }
 
@@ -198,22 +277,23 @@
     renderTodos();
   };
 
-  window.deleteTodo = function(id) {
-    todos = todos.filter(t => t.id !== id);
+  window.deleteTodo = function (id) {
+    todos = todos.filter((t) => t.id !== id);
     save();
     renderTodos();
   };
 
-  window.toggleTodo = function(id) {
+  window.toggleTodo = function (id) {
     const day = todayISO();
     if (!todoDone[day]) todoDone[day] = [];
+    if (todoTotals[day] === undefined) todoTotals[day] = todos.length;
     const idx = todoDone[day].indexOf(id);
     if (idx > -1) {
       todoDone[day].splice(idx, 1);
-      bornes = Math.max(0, bornes - 10);
+      tuff = Math.max(0, tuff - 10);
     } else {
       todoDone[day].push(id);
-      bornes += 10;
+      tuff += 10;
     }
     save();
     renderTodos();
@@ -223,16 +303,18 @@
   function renderTodos() {
     el.todoList.innerHTML = "";
     const day = todayISO();
-    const doneToday = todoDone[day] || [];
+    const doneToday = (todoDone[day] || []).filter((id) =>
+      todos.some((todo) => todo.id === id),
+    );
 
     if (todos.length === 0) {
       el.todoList.innerHTML = `<li style="text-align:center; color: var(--text-dim); padding: 8px;">Aucune routine.</li>`;
       el.todoProgressText.textContent = "0/0";
-      el.bornesBadge.textContent = `${bornes} bornes`;
+      el.tuffBadge.textContent = `${tuff} tuff`;
       return;
     }
 
-    todos.forEach(t => {
+    todos.forEach((t) => {
       const isDone = doneToday.includes(t.id);
       const li = document.createElement("li");
       li.className = `todo-row ${isDone ? "is-done" : ""}`;
@@ -247,18 +329,104 @@
     });
 
     el.todoProgressText.textContent = `${doneToday.length}/${todos.length}`;
-    el.bornesBadge.textContent = `${bornes} bornes`;
+    el.tuffBadge.textContent = `${tuff} tuff`;
+  }
+
+  el.shopForm.onsubmit = (e) => {
+    e.preventDefault();
+    const name = el.shopNameInput.value.trim();
+    const categoryKey = el.shopCategoryInput.value;
+    const category = SHOP_CATEGORIES[categoryKey];
+    if (!name || !category) return;
+    const price =
+      Math.floor(Math.random() * (category.max - category.min + 1)) +
+      category.min;
+    shopItems.push({
+      id: "shop_" + Date.now(),
+      name,
+      category: categoryKey,
+      price,
+      purchased: false,
+    });
+    el.shopNameInput.value = "";
+    save();
+    renderShop();
+  };
+
+  window.buyShopItem = function (id) {
+    const item = shopItems.find((shopItem) => shopItem.id === id);
+    if (!item || item.purchased) return;
+    if (tuff < item.price) {
+      alert(`Il te manque ${item.price - tuff} tuff.`);
+      return;
+    }
+    tuff -= item.price;
+    item.purchased = true;
+    item.purchasedAt = todayISO();
+    save();
+    renderTodos();
+    renderShop();
+  };
+
+  window.deleteShopItem = function (id) {
+    shopItems = shopItems.filter((item) => item.id !== id);
+    save();
+    renderShop();
+  };
+
+  function renderShop() {
+    el.shopList.innerHTML = "";
+    if (shopItems.length === 0) {
+      el.shopList.innerHTML = `<li class="shop-empty">Aucune envie pour le moment.</li>`;
+      return;
+    }
+    shopItems.forEach((item) => {
+      const category = SHOP_CATEGORIES[item.category] || { label: "Autre" };
+      const li = document.createElement("li");
+      li.className = `shop-item ${item.purchased ? "is-purchased" : ""}`;
+
+      const details = document.createElement("div");
+      details.className = "shop-item__details";
+      const name = document.createElement("strong");
+      name.textContent = item.name;
+      const meta = document.createElement("span");
+      meta.textContent = item.purchased
+        ? `${category.label} · acheté le ${item.purchasedAt}`
+        : category.label;
+      details.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "shop-item__actions";
+      const price = document.createElement("span");
+      price.className = "shop-price";
+      price.textContent = `${item.price} tuff`;
+      const buyButton = document.createElement("button");
+      buyButton.type = "button";
+      buyButton.className = "btn btn-ghost shop-buy";
+      buyButton.textContent = item.purchased ? "Acheté" : "Acheter";
+      buyButton.disabled = item.purchased;
+      buyButton.onclick = () => window.buyShopItem(item.id);
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "btn-del";
+      deleteButton.textContent = "✕";
+      deleteButton.title = "Supprimer cette envie";
+      deleteButton.onclick = () => window.deleteShopItem(item.id);
+      actions.append(price, buyButton, deleteButton);
+      li.append(details, actions);
+      el.shopList.appendChild(li);
+    });
   }
 
   // Historique Table
   function renderHistory() {
     el.historyBody.innerHTML = "";
-    const sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+    const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
     if (sorted.length === 0) {
       el.historyBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color: var(--text-dim);">Vide.</td></tr>`;
       return;
     }
-    sorted.forEach(x => {
+    sorted.forEach((x) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `<td>${x.date}</td><td><strong>${x.value}</strong></td><td style="text-align:right;"><button class="btn btn-ghost" style="padding:2px 8px;font-size:0.75rem;color:var(--danger);" onclick="deleteEntry('${x.date}')">Supprimer</button></td>`;
       el.historyBody.appendChild(tr);
@@ -268,15 +436,31 @@
   // Sync GitHub
   el.syncPushBtn.onclick = async () => {
     const cfg = load(K_GH, { repo: "", token: "" });
-    if (!cfg.repo || !cfg.token) { alert("Configurez les accès GitHub dans l'engrenage !"); return; }
+    if (!cfg.repo || !cfg.token) {
+      alert("Configurez les accès GitHub dans l'engrenage !");
+      return;
+    }
     const url = `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
-    const payload = { entries, todos, todoDone, bornes };
-    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
-    
+    const payload = {
+      appVersion: APP_VERSION,
+      dataFormatVersion: DATA_FORMAT_VERSION,
+      entries,
+      todos,
+      todoDone,
+      todoTotals,
+      tuff,
+      shopItems,
+    };
+    const b64 = btoa(
+      unescape(encodeURIComponent(JSON.stringify(payload, null, 2))),
+    );
+
     try {
       el.syncPushBtn.textContent = "Envoi...";
       let sha = null;
-      const resGet = await fetch(url, { headers: { "Authorization": `token ${cfg.token}` } });
+      const resGet = await fetch(url, {
+        headers: { Authorization: `token ${cfg.token}` },
+      });
       if (resGet.ok) sha = (await resGet.json()).sha;
 
       const body = { message: "Sync Horizon", content: b64 };
@@ -284,36 +468,60 @@
 
       const resPut = await fetch(url, {
         method: "PUT",
-        headers: { "Authorization": `token ${cfg.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        headers: {
+          Authorization: `token ${cfg.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       });
-      if (resPut.ok) alert("Push réussi !"); else alert("Erreur lors du push.");
-    } catch(e) { alert("Erreur réseau : " + e.message); }
-    finally { el.syncPushBtn.textContent = "Mettre à jour GitHub"; }
+      if (resPut.ok) alert("Push réussi !");
+      else alert("Erreur lors du push.");
+    } catch (e) {
+      alert("Erreur réseau : " + e.message);
+    } finally {
+      el.syncPushBtn.textContent = "Mettre à jour GitHub";
+    }
   };
 
   el.syncPullBtn.onclick = async () => {
     const cfg = load(K_GH, { repo: "", token: "" });
-    if (!cfg.repo || !cfg.token) { alert("Configurez les accès GitHub !"); return; }
+    if (!cfg.repo || !cfg.token) {
+      alert("Configurez les accès GitHub !");
+      return;
+    }
     const url = `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
     try {
       el.syncPullBtn.textContent = "Chargement...";
-      const res = await fetch(url, { headers: { "Authorization": `token ${cfg.token}` } });
-      if (!res.ok) { alert("Fichier distant introuvable."); return; }
+      const res = await fetch(url, {
+        headers: { Authorization: `token ${cfg.token}` },
+      });
+      if (!res.ok) {
+        alert("Fichier distant introuvable.");
+        return;
+      }
       const data = await res.json();
-      const parsed = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\s/g, '')))));
+      const parsed = JSON.parse(
+        decodeURIComponent(escape(atob(data.content.replace(/\s/g, "")))),
+      );
       if (parsed.entries) entries = parsed.entries;
       if (parsed.todos) todos = parsed.todos;
       if (parsed.todoDone) todoDone = parsed.todoDone;
-      if (parsed.bornes !== undefined) bornes = parsed.bornes;
-      save(); renderAll();
+      todoTotals = migrateTodoTotals(todos, todoDone, parsed.todoTotals);
+      if (parsed.tuff !== undefined) tuff = parsed.tuff;
+      if (Array.isArray(parsed.shopItems)) shopItems = parsed.shopItems;
+      save();
+      renderAll();
       alert("Pull réussi !");
-    } catch(e) { alert("Erreur : " + e.message); }
-    finally { el.syncPullBtn.textContent = "Récupérer GitHub"; }
+    } catch (e) {
+      alert("Erreur : " + e.message);
+    } finally {
+      el.syncPullBtn.textContent = "Récupérer GitHub";
+    }
   };
 
   function renderAll() {
     renderTodos();
+    renderShop();
     renderHeatmap();
     renderTrend();
     renderHistory();
