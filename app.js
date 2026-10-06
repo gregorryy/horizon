@@ -1,12 +1,13 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "1.0.12";
-  const DATA_FORMAT_VERSION = 3;
+  const APP_VERSION = "1.0.13";
+  const DATA_FORMAT_VERSION = 4;
   const K_ENTRIES = "horizon-entries-v4";
   const K_TODOS = "horizon-todos-v4";
   const K_DONE = "horizon-done-v4";
   const K_TODO_TOTALS = "horizon-todo-totals-v1";
+  const K_TUFF_REWARDS = "horizon-tuff-rewards-v1";
   const K_TUFF = "horizon-tuff-v4";
   const K_SHOP = "horizon-shop-v1";
   const K_OLD_BORNES = "horizon-bornes-v4";
@@ -19,6 +20,7 @@
   ]);
   let todoDone = load(K_DONE, {});
   let todoTotals = {};
+  let tuffRewards = load(K_TUFF_REWARDS, {});
   let shopItems = load(K_SHOP, []);
   let tuff = parseInt(
     localStorage.getItem(K_TUFF) || localStorage.getItem(K_OLD_BORNES) || "0",
@@ -41,6 +43,7 @@
     localStorage.setItem(K_TODOS, JSON.stringify(todos));
     localStorage.setItem(K_DONE, JSON.stringify(todoDone));
     localStorage.setItem(K_TODO_TOTALS, JSON.stringify(todoTotals));
+    localStorage.setItem(K_TUFF_REWARDS, JSON.stringify(tuffRewards));
     localStorage.setItem(K_TUFF, tuff.toString());
     localStorage.setItem(K_SHOP, JSON.stringify(shopItems));
   }
@@ -303,13 +306,21 @@
     const day = todayISO();
     if (!todoDone[day]) todoDone[day] = [];
     if (todoTotals[day] === undefined) todoTotals[day] = todos.length;
+    if (!tuffRewards[day]) tuffRewards[day] = {};
     const idx = todoDone[day].indexOf(id);
     if (idx > -1) {
       todoDone[day].splice(idx, 1);
-      tuff = Math.max(0, tuff - 10);
+      const reward = tuffRewards[day][id] ?? 10;
+      tuff -= reward;
+      delete tuffRewards[day][id];
     } else {
+      const completedCount = todoDone[day].filter((todoId) =>
+        todos.some((todo) => todo.id === todoId),
+      ).length;
+      const reward = 10 + completedCount * 5;
       todoDone[day].push(id);
-      tuff += 10;
+      tuffRewards[day][id] = reward;
+      tuff += reward;
     }
     save();
     renderTodos();
@@ -464,6 +475,7 @@
       todos,
       todoDone,
       todoTotals,
+      tuffRewards,
       tuff,
       shopItems,
     };
@@ -523,6 +535,10 @@
       if (parsed.todos) todos = parsed.todos;
       if (parsed.todoDone) todoDone = parsed.todoDone;
       todoTotals = migrateTodoTotals(todos, todoDone, parsed.todoTotals);
+      tuffRewards =
+        parsed.tuffRewards && typeof parsed.tuffRewards === "object"
+          ? parsed.tuffRewards
+          : {};
       if (parsed.tuff !== undefined) tuff = parsed.tuff;
       if (Array.isArray(parsed.shopItems)) shopItems = parsed.shopItems;
       save();
