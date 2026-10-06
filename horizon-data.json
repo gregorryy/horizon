@@ -1,5 +1,5 @@
 {
-  "appVersion": "1.0.11",
+  "appVersion": "1.0.12",
   "dataFormatVersion": 3,
   "entries": [
     {
@@ -285,6 +285,6 @@
     "2026-10-04": 5,
     "2026-10-05": 5
   },
-  "tuff": 950,
+  "tuff": 800,
   "shopItems": []
 }
