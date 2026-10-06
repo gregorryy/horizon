@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "1.0.11";
+  const APP_VERSION = "1.0.12";
   const DATA_FORMAT_VERSION = 3;
   const K_ENTRIES = "horizon-entries-v4";
   const K_TODOS = "horizon-todos-v4";
@@ -90,6 +90,8 @@
     shopList: document.getElementById("shopList"),
     historyBody: document.getElementById("historyBody"),
     tuffBadge: document.getElementById("tuffBadge"),
+    tuffWithdrawForm: document.getElementById("tuffWithdrawForm"),
+    tuffWithdrawInput: document.getElementById("tuffWithdrawInput"),
     menuBtn: document.getElementById("menuBtn"),
     configModal: document.getElementById("configModal"),
     configClose: document.getElementById("configClose"),
@@ -124,6 +126,20 @@
     );
     el.configModal.classList.remove("is-open");
     alert("Paramètres enregistrés !");
+  };
+
+  el.tuffWithdrawForm.onsubmit = (e) => {
+    e.preventDefault();
+    const amount = Math.floor(Number(el.tuffWithdrawInput.value));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (amount > tuff) {
+      alert(`Tu ne peux pas retirer plus que ton solde de ${tuff} tuff.`);
+      return;
+    }
+    tuff -= amount;
+    el.tuffWithdrawInput.value = "";
+    save();
+    renderTodos();
   };
 
   // Enregistrement Valeur
