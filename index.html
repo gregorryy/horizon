@@ -137,6 +137,20 @@
       </section>
 
       <footer class="footer-sync">
+        <form id="tuffWithdrawForm" class="tuff-withdraw-form">
+          <label for="tuffWithdrawInput">Retirer des tuff</label>
+          <div class="tuff-withdraw-controls">
+            <input
+              id="tuffWithdrawInput"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Montant"
+              required
+            />
+            <button type="submit" class="btn btn-ghost">Retirer</button>
+          </div>
+        </form>
         <button id="syncPushBtn" class="btn btn-success">
           Mettre à jour GitHub
         </button>
