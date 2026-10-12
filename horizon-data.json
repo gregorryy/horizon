@@ -379,6 +379,15 @@
       "t_1789317387472": 25
     }
   },
-  "tuff": 1100,
-  "shopItems": []
+  "tuff": 251,
+  "shopItems": [
+    {
+      "id": "shop_1791811558716",
+      "name": "Claude Pro - Abonnement",
+      "category": "materiel",
+      "price": 849,
+      "purchased": true,
+      "purchasedAt": "2026-10-12"
+    }
+  ]
 }
