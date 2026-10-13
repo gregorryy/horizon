@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const APP_VERSION = "1.0.13";
+  const APP_VERSION = "1.0.14";
   const DATA_FORMAT_VERSION = 4;
   const K_ENTRIES = "horizon-entries-v4";
   const K_TODOS = "horizon-todos-v4";
@@ -12,43 +12,20 @@
   const K_SHOP = "horizon-shop-v1";
   const K_OLD_BORNES = "horizon-bornes-v4";
   const K_GH = "horizon-gh-v4";
+  // Filets de sécurité : copie de l'état avant un Pull, et copie brute d'un
+  // stockage local illisible avant qu'il ne soit réparé.
+  const K_BACKUP = "horizon-backup-v1";
+  const K_CORRUPT = "horizon-corrupt-v1";
 
-  let entries = load(K_ENTRIES, []);
-  let todos = load(K_TODOS, [
-    { id: "1", text: "Boire 1.5L d'eau" },
-    { id: "2", text: "Session de code" },
+  const STATE_KEYS = new Set([
+    K_ENTRIES,
+    K_TODOS,
+    K_DONE,
+    K_TODO_TOTALS,
+    K_TUFF_REWARDS,
+    K_TUFF,
+    K_SHOP,
   ]);
-  let todoDone = load(K_DONE, {});
-  let todoTotals = {};
-  let tuffRewards = load(K_TUFF_REWARDS, {});
-  let shopItems = load(K_SHOP, []);
-  let tuff = parseInt(
-    localStorage.getItem(K_TUFF) || localStorage.getItem(K_OLD_BORNES) || "0",
-    10,
-  );
-
-  let currentDisplayYear = new Date().getFullYear();
-
-  function load(k, fallback) {
-    try {
-      const r = localStorage.getItem(k);
-      return r ? JSON.parse(r) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
-  function save() {
-    localStorage.setItem(K_ENTRIES, JSON.stringify(entries));
-    localStorage.setItem(K_TODOS, JSON.stringify(todos));
-    localStorage.setItem(K_DONE, JSON.stringify(todoDone));
-    localStorage.setItem(K_TODO_TOTALS, JSON.stringify(todoTotals));
-    localStorage.setItem(K_TUFF_REWARDS, JSON.stringify(tuffRewards));
-    localStorage.setItem(K_TUFF, tuff.toString());
-    localStorage.setItem(K_SHOP, JSON.stringify(shopItems));
-  }
-
-  const todayISO = () => new Date().toISOString().split("T")[0];
 
   const SHOP_CATEGORIES = {
     "petit-plaisir": { label: "Plaisir", min: 20, max: 100 },
@@ -56,6 +33,200 @@
     materiel: { label: "Matériel", min: 400, max: 1500 },
     "gros-projet": { label: "Projet", min: 1500, max: 5000 },
   };
+
+  const DEFAULT_TODOS = [
+    { id: "1", text: "Boire 1.5L d'eau" },
+    { id: "2", text: "Session de code" },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Dates (locales : le jour affiché et le jour enregistré sont toujours les mêmes)
+  // ---------------------------------------------------------------------------
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const toISO = (d) =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const todayISO = () => toISO(new Date());
+
+  // ---------------------------------------------------------------------------
+  // Validation / intégrité des données
+  // ---------------------------------------------------------------------------
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const ID_RE = /^[\w.-]{1,64}$/;
+  const REPO_RE = /^(?!\.+\/)[A-Za-z0-9_.-]+\/(?!\.+$)[A-Za-z0-9_.-]+$/;
+  const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+  const MAX_TEXT = 200;
+
+  const isPlainObject = (v) =>
+    v !== null && typeof v === "object" && !Array.isArray(v);
+
+  function isISODate(s) {
+    if (typeof s !== "string" || !ISO_RE.test(s)) return false;
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return (
+      dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
+    );
+  }
+
+  const isSafeId = (s) =>
+    typeof s === "string" && ID_RE.test(s) && !FORBIDDEN_KEYS.has(s);
+
+  const cleanText = (s) =>
+    typeof s === "string" ? s.trim().slice(0, MAX_TEXT) : "";
+
+  function toFiniteNumber(v) {
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  }
+
+  // Chaque sanitizer ne jette jamais : il écarte les éléments invalides et
+  // incrémente stats.dropped pour que l'appelant sache qu'il y a eu perte.
+  function sanitizeEntries(raw, stats) {
+    const byDate = new Map();
+    if (!Array.isArray(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return [];
+    }
+    raw.forEach((x) => {
+      const value = isPlainObject(x) ? toFiniteNumber(x.value) : null;
+      if (!isPlainObject(x) || !isISODate(x.date) || value === null) {
+        stats.dropped++;
+        return;
+      }
+      if (byDate.has(x.date)) stats.dropped++;
+      byDate.set(x.date, value);
+    });
+    return [...byDate].map(([date, value]) => ({ date, value }));
+  }
+
+  function sanitizeTodos(raw, stats) {
+    const out = [];
+    const seen = new Set();
+    if (!Array.isArray(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return out;
+    }
+    raw.forEach((t) => {
+      const text = isPlainObject(t) ? cleanText(t.text) : "";
+      if (!isPlainObject(t) || !isSafeId(t.id) || !text || seen.has(t.id)) {
+        stats.dropped++;
+        return;
+      }
+      seen.add(t.id);
+      out.push({ id: t.id, text });
+    });
+    return out;
+  }
+
+  function sanitizeTodoDone(raw, stats) {
+    const out = {};
+    if (!isPlainObject(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return out;
+    }
+    Object.keys(raw).forEach((date) => {
+      if (!isISODate(date) || !Array.isArray(raw[date])) {
+        stats.dropped++;
+        return;
+      }
+      const ids = raw[date].filter(isSafeId);
+      if (ids.length !== raw[date].length) stats.dropped++;
+      out[date] = [...new Set(ids)];
+    });
+    return out;
+  }
+
+  function sanitizeTotals(raw, stats) {
+    const out = {};
+    if (!isPlainObject(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return out;
+    }
+    Object.keys(raw).forEach((date) => {
+      const n = toFiniteNumber(raw[date]);
+      if (!isISODate(date) || n === null || n < 0) {
+        stats.dropped++;
+        return;
+      }
+      out[date] = Math.trunc(n);
+    });
+    return out;
+  }
+
+  function sanitizeRewards(raw, stats) {
+    const out = {};
+    if (!isPlainObject(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return out;
+    }
+    Object.keys(raw).forEach((date) => {
+      if (!isISODate(date) || !isPlainObject(raw[date])) {
+        stats.dropped++;
+        return;
+      }
+      const day = {};
+      Object.keys(raw[date]).forEach((id) => {
+        const n = toFiniteNumber(raw[date][id]);
+        if (!isSafeId(id) || n === null) {
+          stats.dropped++;
+          return;
+        }
+        day[id] = Math.round(n);
+      });
+      out[date] = day;
+    });
+    return out;
+  }
+
+  function sanitizeShop(raw, stats) {
+    const out = [];
+    const seen = new Set();
+    if (!Array.isArray(raw)) {
+      if (raw !== undefined) stats.dropped++;
+      return out;
+    }
+    raw.forEach((s) => {
+      const name = isPlainObject(s) ? cleanText(s.name) : "";
+      const price = isPlainObject(s) ? toFiniteNumber(s.price) : null;
+      if (
+        !isPlainObject(s) ||
+        !isSafeId(s.id) ||
+        seen.has(s.id) ||
+        !name ||
+        price === null ||
+        price < 0
+      ) {
+        stats.dropped++;
+        return;
+      }
+      seen.add(s.id);
+      const item = {
+        id: s.id,
+        name,
+        category: typeof s.category === "string" ? s.category : "",
+        price: Math.round(price),
+        purchased: s.purchased === true,
+      };
+      if (item.purchased && isISODate(s.purchasedAt)) {
+        item.purchasedAt = s.purchasedAt;
+      }
+      out.push(item);
+    });
+    return out;
+  }
+
+  function sanitizeTuff(raw, stats) {
+    const n = toFiniteNumber(raw);
+    if (n === null) {
+      if (raw !== undefined) stats.dropped++;
+      return 0;
+    }
+    return Math.trunc(n);
+  }
 
   function migrateTodoTotals(importedTodos, importedDone, importedTotals) {
     const totals =
@@ -71,7 +242,160 @@
     return totals;
   }
 
-  todoTotals = migrateTodoTotals(todos, todoDone, load(K_TODO_TOTALS, {}));
+  // Normalise un état brut (stockage local ou JSON distant) en état sain.
+  function normalizeState(raw) {
+    const stats = { dropped: 0 };
+    const todos = sanitizeTodos(raw.todos, stats);
+    const todoDone = sanitizeTodoDone(raw.todoDone, stats);
+    const state = {
+      entries: sanitizeEntries(raw.entries, stats),
+      todos,
+      todoDone,
+      todoTotals: migrateTodoTotals(
+        todos,
+        todoDone,
+        sanitizeTotals(raw.todoTotals, stats),
+      ),
+      tuffRewards: sanitizeRewards(raw.tuffRewards, stats),
+      tuff: sanitizeTuff(raw.tuff, stats),
+      shopItems: sanitizeShop(raw.shopItems, stats),
+    };
+    return { state, dropped: stats.dropped };
+  }
+
+  // Vérifie qu'un JSON distant a la bonne forme avant d'y toucher.
+  function assertRemoteShape(p) {
+    if (!isPlainObject(p)) throw new Error("fichier distant invalide");
+    if (
+      typeof p.dataFormatVersion === "number" &&
+      p.dataFormatVersion > DATA_FORMAT_VERSION
+    ) {
+      throw new Error(
+        "le fichier distant vient d'une version plus récente de l'app",
+      );
+    }
+    const arrays = ["entries", "todos", "shopItems"];
+    const objects = ["todoDone", "todoTotals", "tuffRewards"];
+    arrays.forEach((k) => {
+      if (p[k] !== undefined && !Array.isArray(p[k])) {
+        throw new Error(`champ « ${k} » invalide`);
+      }
+    });
+    objects.forEach((k) => {
+      if (p[k] !== undefined && !isPlainObject(p[k])) {
+        throw new Error(`champ « ${k} » invalide`);
+      }
+    });
+    if (p.tuff !== undefined && toFiniteNumber(p.tuff) === null) {
+      throw new Error("champ « tuff » invalide");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stockage local
+  // ---------------------------------------------------------------------------
+  function lsGet(k) {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  }
+
+  function load(k, fallback) {
+    try {
+      const r = localStorage.getItem(k);
+      return r ? JSON.parse(r) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  let entries = [];
+  let todos = [];
+  let todoDone = {};
+  let todoTotals = {};
+  let tuffRewards = {};
+  let shopItems = [];
+  let tuff = 0;
+
+  function applyState(s) {
+    entries = s.entries;
+    todos = s.todos;
+    todoDone = s.todoDone;
+    todoTotals = s.todoTotals;
+    tuffRewards = s.tuffRewards;
+    tuff = s.tuff;
+    shopItems = s.shopItems;
+  }
+
+  function snapshot() {
+    return { entries, todos, todoDone, todoTotals, tuffRewards, tuff, shopItems };
+  }
+
+  function loadFromStorage() {
+    const raw = {
+      entries: load(K_ENTRIES, []),
+      todos: load(K_TODOS, DEFAULT_TODOS),
+      todoDone: load(K_DONE, {}),
+      todoTotals: load(K_TODO_TOTALS, {}),
+      tuffRewards: load(K_TUFF_REWARDS, {}),
+      tuff: lsGet(K_TUFF) || lsGet(K_OLD_BORNES) || "0",
+      shopItems: load(K_SHOP, []),
+    };
+    const { state, dropped } = normalizeState(raw);
+    if (dropped > 0) {
+      console.warn(`Horizon : ${dropped} élément(s) invalide(s) écarté(s).`);
+      try {
+        localStorage.setItem(K_CORRUPT, JSON.stringify(raw));
+      } catch {
+        /* stockage plein : on continue quand même */
+      }
+    }
+    applyState(state);
+  }
+
+  let saveWarned = false;
+  function save() {
+    try {
+      localStorage.setItem(K_ENTRIES, JSON.stringify(entries));
+      localStorage.setItem(K_TODOS, JSON.stringify(todos));
+      localStorage.setItem(K_DONE, JSON.stringify(todoDone));
+      localStorage.setItem(K_TODO_TOTALS, JSON.stringify(todoTotals));
+      localStorage.setItem(K_TUFF_REWARDS, JSON.stringify(tuffRewards));
+      localStorage.setItem(K_TUFF, tuff.toString());
+      localStorage.setItem(K_SHOP, JSON.stringify(shopItems));
+      return true;
+    } catch {
+      if (!saveWarned) {
+        saveWarned = true;
+        alert(
+          "Impossible d'enregistrer en local (stockage plein ou bloqué). Les dernières modifications risquent d'être perdues.",
+        );
+      }
+      return false;
+    }
+  }
+
+  loadFromStorage();
+
+  // Plusieurs onglets : on recharge l'état modifié ailleurs plutôt que de
+  // l'écraser avec une copie périmée au prochain save().
+  window.addEventListener("storage", (e) => {
+    if (e.key !== null && !STATE_KEYS.has(e.key)) return;
+    loadFromStorage();
+    renderAll();
+  });
+
+  // Identifiant unique, au même format qu'avant (préfixe + horodatage).
+  function newId(prefix, existingIds) {
+    const taken = new Set(existingIds);
+    let n = Date.now();
+    while (taken.has(prefix + n)) n++;
+    return prefix + n;
+  }
+
+  let currentDisplayYear = new Date().getFullYear();
 
   const el = {
     currentDateLabel: document.getElementById("currentDateLabel"),
@@ -112,21 +436,36 @@
   });
 
   // Paramètres GitHub
+  function getGhConfig() {
+    const c = load(K_GH, null);
+    return {
+      repo: isPlainObject(c) && typeof c.repo === "string" ? c.repo : "",
+      token: isPlainObject(c) && typeof c.token === "string" ? c.token : "",
+    };
+  }
+
   el.menuBtn.onclick = () => {
-    const cfg = load(K_GH, { repo: "", token: "" });
+    const cfg = getGhConfig();
     el.ghRepo.value = cfg.repo;
     el.ghToken.value = cfg.token;
     el.configModal.classList.add("is-open");
   };
   el.configClose.onclick = () => el.configModal.classList.remove("is-open");
   el.configSave.onclick = () => {
-    localStorage.setItem(
-      K_GH,
-      JSON.stringify({
-        repo: el.ghRepo.value.trim(),
-        token: el.ghToken.value.trim(),
-      }),
-    );
+    const repo = el.ghRepo.value.trim();
+    if (repo && !REPO_RE.test(repo)) {
+      alert("Dépôt invalide : le format attendu est utilisateur/repo.");
+      return;
+    }
+    try {
+      localStorage.setItem(
+        K_GH,
+        JSON.stringify({ repo, token: el.ghToken.value.trim() }),
+      );
+    } catch {
+      alert("Impossible d'enregistrer les paramètres.");
+      return;
+    }
     el.configModal.classList.remove("is-open");
     alert("Paramètres enregistrés !");
   };
@@ -149,7 +488,7 @@
   el.entryForm.onsubmit = (e) => {
     e.preventDefault();
     const val = parseFloat(el.valueInput.value);
-    if (isNaN(val)) return;
+    if (!Number.isFinite(val)) return;
     const day = todayISO();
     const ex = entries.find((x) => x.date === day);
     if (ex) ex.value = val;
@@ -159,12 +498,12 @@
     renderAll();
   };
 
-  window.deleteEntry = function (date) {
+  function deleteEntry(date) {
     if (!confirm(`Supprimer l'entrée du ${date} ?`)) return;
     entries = entries.filter((x) => x.date !== date);
     save();
     renderAll();
-  };
+  }
 
   // Sélecteur d'année Heatmap
   el.prevYearBtn.onclick = () => {
@@ -197,7 +536,7 @@
     });
 
     while (d <= end || d.getDay() !== 1) {
-      const iso = d.toISOString().split("T")[0];
+      const iso = toISO(d);
       const box = document.createElement("i");
       box.className = "square";
 
@@ -290,19 +629,25 @@
     e.preventDefault();
     const text = el.todoInput.value.trim();
     if (!text) return;
-    todos.push({ id: "t_" + Date.now(), text });
+    todos.push({
+      id: newId(
+        "t_",
+        todos.map((t) => t.id),
+      ),
+      text,
+    });
     el.todoInput.value = "";
     save();
     renderTodos();
   };
 
-  window.deleteTodo = function (id) {
+  function deleteTodo(id) {
     todos = todos.filter((t) => t.id !== id);
     save();
     renderTodos();
-  };
+  }
 
-  window.toggleTodo = function (id) {
+  function toggleTodo(id) {
     const day = todayISO();
     if (!todoDone[day]) todoDone[day] = [];
     if (todoTotals[day] === undefined) todoTotals[day] = todos.length;
@@ -325,7 +670,7 @@
     save();
     renderTodos();
     renderHeatmap();
-  };
+  }
 
   function renderTodos() {
     el.todoList.innerHTML = "";
@@ -345,13 +690,25 @@
       const isDone = doneToday.includes(t.id);
       const li = document.createElement("li");
       li.className = `todo-row ${isDone ? "is-done" : ""}`;
-      li.innerHTML = `
-        <div class="todo-left" onclick="window.toggleTodo('${t.id}')">
-          <div class="todo-box">${isDone ? "✓" : ""}</div>
-          <span class="todo-text">${t.text}</span>
-        </div>
-        <button class="btn-del" onclick="window.deleteTodo('${t.id}')">✕</button>
-      `;
+
+      const left = document.createElement("div");
+      left.className = "todo-left";
+      left.onclick = () => toggleTodo(t.id);
+      const box = document.createElement("div");
+      box.className = "todo-box";
+      box.textContent = isDone ? "✓" : "";
+      const text = document.createElement("span");
+      text.className = "todo-text";
+      text.textContent = t.text;
+      left.append(box, text);
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn-del";
+      del.textContent = "✕";
+      del.onclick = () => deleteTodo(t.id);
+
+      li.append(left, del);
       el.todoList.appendChild(li);
     });
 
@@ -369,7 +726,10 @@
       Math.floor(Math.random() * (category.max - category.min + 1)) +
       category.min;
     shopItems.push({
-      id: "shop_" + Date.now(),
+      id: newId(
+        "shop_",
+        shopItems.map((s) => s.id),
+      ),
       name,
       category: categoryKey,
       price,
@@ -380,7 +740,7 @@
     renderShop();
   };
 
-  window.buyShopItem = function (id) {
+  function buyShopItem(id) {
     const item = shopItems.find((shopItem) => shopItem.id === id);
     if (!item || item.purchased) return;
     if (tuff < item.price) {
@@ -393,13 +753,13 @@
     save();
     renderTodos();
     renderShop();
-  };
+  }
 
-  window.deleteShopItem = function (id) {
+  function deleteShopItem(id) {
     shopItems = shopItems.filter((item) => item.id !== id);
     save();
     renderShop();
-  };
+  }
 
   function renderShop() {
     el.shopList.innerHTML = "";
@@ -418,7 +778,9 @@
       name.textContent = item.name;
       const meta = document.createElement("span");
       meta.textContent = item.purchased
-        ? `${category.label} · acheté le ${item.purchasedAt}`
+        ? item.purchasedAt
+          ? `${category.label} · acheté le ${item.purchasedAt}`
+          : `${category.label} · acheté`
         : category.label;
       details.append(name, meta);
 
@@ -432,13 +794,13 @@
       buyButton.className = "btn btn-ghost shop-buy";
       buyButton.textContent = item.purchased ? "Acheté" : "Acheter";
       buyButton.disabled = item.purchased;
-      buyButton.onclick = () => window.buyShopItem(item.id);
+      buyButton.onclick = () => buyShopItem(item.id);
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
       deleteButton.className = "btn-del";
       deleteButton.textContent = "✕";
       deleteButton.title = "Supprimer cette envie";
-      deleteButton.onclick = () => window.deleteShopItem(item.id);
+      deleteButton.onclick = () => deleteShopItem(item.id);
       actions.append(price, buyButton, deleteButton);
       li.append(details, actions);
       el.shopList.appendChild(li);
@@ -455,98 +817,216 @@
     }
     sorted.forEach((x) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${x.date}</td><td><strong>${x.value}</strong></td><td style="text-align:right;"><button class="btn btn-ghost" style="padding:2px 8px;font-size:0.75rem;color:var(--danger);" onclick="deleteEntry('${x.date}')">Supprimer</button></td>`;
+
+      const tdDate = document.createElement("td");
+      tdDate.textContent = x.date;
+
+      const tdValue = document.createElement("td");
+      const strong = document.createElement("strong");
+      strong.textContent = String(x.value);
+      tdValue.appendChild(strong);
+
+      const tdAction = document.createElement("td");
+      tdAction.style.textAlign = "right";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-ghost";
+      btn.style.padding = "2px 8px";
+      btn.style.fontSize = "0.75rem";
+      btn.style.color = "var(--danger)";
+      btn.textContent = "Supprimer";
+      btn.onclick = () => deleteEntry(x.date);
+      tdAction.appendChild(btn);
+
+      tr.append(tdDate, tdValue, tdAction);
       el.historyBody.appendChild(tr);
     });
   }
 
+  // ---------------------------------------------------------------------------
   // Sync GitHub
-  el.syncPushBtn.onclick = async () => {
-    const cfg = load(K_GH, { repo: "", token: "" });
+  // ---------------------------------------------------------------------------
+  function ghUrl(cfg) {
+    return `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
+  }
+
+  function ghHeaders(cfg, extra) {
+    return {
+      Authorization: `Bearer ${cfg.token}`,
+      Accept: "application/vnd.github+json",
+      ...extra,
+    };
+  }
+
+  // Retourne la config si elle est complète et bien formée, sinon null.
+  function requireGhConfig(message) {
+    const cfg = getGhConfig();
     if (!cfg.repo || !cfg.token) {
-      alert("Configurez les accès GitHub dans l'engrenage !");
+      alert(message);
+      return null;
+    }
+    if (!REPO_RE.test(cfg.repo)) {
+      alert("Dépôt invalide : le format attendu est utilisateur/repo.");
+      return null;
+    }
+    return cfg;
+  }
+
+  function encodeBase64Utf8(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    bytes.forEach((b) => {
+      bin += String.fromCharCode(b);
+    });
+    return btoa(bin);
+  }
+
+  function decodeBase64Utf8(b64) {
+    const bin = atob(b64.replace(/\s/g, ""));
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  }
+
+  // Lit le fichier distant. { exists:false } si absent, exception sinon.
+  async function fetchRemote(cfg) {
+    const res = await fetch(ghUrl(cfg), {
+      headers: ghHeaders(cfg),
+      cache: "no-store",
+    });
+    if (res.status === 404) return { exists: false };
+    if (!res.ok) throw new Error(`GitHub a répondu ${res.status}`);
+    const data = await res.json();
+    return { exists: true, sha: data.sha, data };
+  }
+
+  function parseRemotePayload(data) {
+    if (
+      !data ||
+      data.encoding !== "base64" ||
+      typeof data.content !== "string" ||
+      !data.content
+    ) {
+      throw new Error("fichier distant illisible ou trop volumineux");
+    }
+    const parsed = JSON.parse(decodeBase64Utf8(data.content));
+    assertRemoteShape(parsed);
+    return parsed;
+  }
+
+  el.syncPushBtn.onclick = async () => {
+    const cfg = requireGhConfig("Configurez les accès GitHub dans l'engrenage !");
+    if (!cfg) return;
+
+    // On ne pousse jamais un état local qui ne passe pas la validation.
+    const { state, dropped } = normalizeState(snapshot());
+    if (dropped > 0) {
+      alert("Données locales incohérentes : envoi annulé.");
       return;
     }
-    const url = `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
     const payload = {
       appVersion: APP_VERSION,
       dataFormatVersion: DATA_FORMAT_VERSION,
-      entries,
-      todos,
-      todoDone,
-      todoTotals,
-      tuffRewards,
-      tuff,
-      shopItems,
+      ...state,
     };
-    const b64 = btoa(
-      unescape(encodeURIComponent(JSON.stringify(payload, null, 2))),
-    );
 
     try {
+      el.syncPushBtn.disabled = true;
       el.syncPushBtn.textContent = "Envoi...";
-      let sha = null;
-      const resGet = await fetch(url, {
-        headers: { Authorization: `token ${cfg.token}` },
-      });
-      if (resGet.ok) sha = (await resGet.json()).sha;
 
-      const body = { message: "Sync Horizon", content: b64 };
-      if (sha) body.sha = sha;
+      const remote = await fetchRemote(cfg);
 
-      const resPut = await fetch(url, {
+      // Garde-fou : un appareil « vide » ne doit pas écraser un historique
+      // plus riche sur GitHub sans confirmation.
+      if (remote.exists) {
+        try {
+          const old = parseRemotePayload(remote.data);
+          const remoteCount = Array.isArray(old.entries) ? old.entries.length : 0;
+          if (remoteCount > state.entries.length) {
+            const ok = confirm(
+              `Le fichier GitHub contient ${remoteCount} entrées, ta copie locale seulement ${state.entries.length}.\n\nÉcraser GitHub quand même ?`,
+            );
+            if (!ok) return;
+          }
+        } catch {
+          /* distant illisible : le remplacer par un état valide est voulu */
+        }
+      }
+
+      const body = {
+        message: "Sync Horizon",
+        content: encodeBase64Utf8(JSON.stringify(payload, null, 2)),
+      };
+      if (remote.exists) body.sha = remote.sha;
+
+      const resPut = await fetch(ghUrl(cfg), {
         method: "PUT",
-        headers: {
-          Authorization: `token ${cfg.token}`,
-          "Content-Type": "application/json",
-        },
+        headers: ghHeaders(cfg, { "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
       if (resPut.ok) alert("Push réussi !");
-      else alert("Erreur lors du push.");
+      else if (resPut.status === 409 || resPut.status === 422) {
+        alert(
+          "Le fichier distant a changé entre-temps. Récupère GitHub puis réessaie.",
+        );
+      } else alert(`Erreur lors du push (${resPut.status}).`);
     } catch (e) {
       alert("Erreur réseau : " + e.message);
     } finally {
+      el.syncPushBtn.disabled = false;
       el.syncPushBtn.textContent = "Mettre à jour GitHub";
     }
   };
 
   el.syncPullBtn.onclick = async () => {
-    const cfg = load(K_GH, { repo: "", token: "" });
-    if (!cfg.repo || !cfg.token) {
-      alert("Configurez les accès GitHub !");
-      return;
-    }
-    const url = `https://api.github.com/repos/${cfg.repo}/contents/horizon-data.json`;
+    const cfg = requireGhConfig("Configurez les accès GitHub !");
+    if (!cfg) return;
     try {
+      el.syncPullBtn.disabled = true;
       el.syncPullBtn.textContent = "Chargement...";
-      const res = await fetch(url, {
-        headers: { Authorization: `token ${cfg.token}` },
-      });
-      if (!res.ok) {
+      const remote = await fetchRemote(cfg);
+      if (!remote.exists) {
         alert("Fichier distant introuvable.");
         return;
       }
-      const data = await res.json();
-      const parsed = JSON.parse(
-        decodeURIComponent(escape(atob(data.content.replace(/\s/g, "")))),
+      const parsed = parseRemotePayload(remote.data);
+
+      // Les champs absents du distant gardent leur valeur locale (comme avant).
+      const { state: next, dropped } = normalizeState({
+        entries: parsed.entries !== undefined ? parsed.entries : entries,
+        todos: parsed.todos !== undefined ? parsed.todos : todos,
+        todoDone: parsed.todoDone !== undefined ? parsed.todoDone : todoDone,
+        todoTotals: parsed.todoTotals,
+        tuffRewards: parsed.tuffRewards,
+        tuff: parsed.tuff !== undefined ? parsed.tuff : tuff,
+        shopItems: parsed.shopItems !== undefined ? parsed.shopItems : shopItems,
+      });
+
+      const note =
+        dropped > 0
+          ? `\n\n${dropped} élément(s) invalide(s) du fichier distant seront ignorés.`
+          : "";
+      const ok = confirm(
+        `Remplacer tes données locales (${entries.length} entrées, ${tuff} tuff) par celles de GitHub (${next.entries.length} entrées, ${next.tuff} tuff) ?${note}`,
       );
-      if (parsed.entries) entries = parsed.entries;
-      if (parsed.todos) todos = parsed.todos;
-      if (parsed.todoDone) todoDone = parsed.todoDone;
-      todoTotals = migrateTodoTotals(todos, todoDone, parsed.todoTotals);
-      tuffRewards =
-        parsed.tuffRewards && typeof parsed.tuffRewards === "object"
-          ? parsed.tuffRewards
-          : {};
-      if (parsed.tuff !== undefined) tuff = parsed.tuff;
-      if (Array.isArray(parsed.shopItems)) shopItems = parsed.shopItems;
+      if (!ok) return;
+
+      try {
+        localStorage.setItem(
+          K_BACKUP,
+          JSON.stringify({ savedAt: new Date().toISOString(), ...snapshot() }),
+        );
+      } catch {
+        /* sauvegarde de précaution best-effort */
+      }
+
+      applyState(next);
       save();
       renderAll();
       alert("Pull réussi !");
     } catch (e) {
       alert("Erreur : " + e.message);
     } finally {
+      el.syncPullBtn.disabled = false;
       el.syncPullBtn.textContent = "Récupérer GitHub";
     }
   };

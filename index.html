@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://api.github.com; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
     <title>Horizon</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -168,7 +173,13 @@
         </div>
         <div class="field">
           <label>Token personnel (PAT)</label>
-          <input type="password" id="ghToken" placeholder="ghp_..." />
+          <input
+            type="password"
+            id="ghToken"
+            placeholder="ghp_..."
+            autocomplete="off"
+            spellcheck="false"
+          />
         </div>
         <div class="modal-actions">
           <button id="configSave" class="btn btn-primary">Enregistrer</button>
